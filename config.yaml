@@ -1,0 +1,11 @@
+# sample YAML configuration file (generateed by ChatGPT)
+
+server:
+  host: localhost
+  port: 8080
+
+database:
+  host: localhost
+  port: 5432
+  user: myuser
+  password: mypassword

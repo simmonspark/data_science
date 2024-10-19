@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<body>
+ 
+<div id="demo">
+ 
+<h2>AJAX Hello World</h2>
+
+<p>
+This example is from "https://www.w3schools.blog/hello-world-ajax".
+
+We use here two files AjaxHelloWorld.html and test.txt. Keep these two files in same folder.
+
+<ul> 
+
+  <li> AJAX is not a programming language. </li>
+  <li> AJAX is a technique for accessing web servers from a web page.</li>
+  <li> AJAX stands for Asynchronous JavaScript And XML. </li>
+</ul>
+
+<ol> 
+  <li> When you open html file in browser. We will be able to see Update Content button. </li>
+  <li> When we click Update Content button, it will call loadDocument() method. </li>
+  <li> We creates an XMLHttpRequest object which is used for communication between client and server. </li>
+  <li> The XMLHttpRequest object invokes open method to open the connection for a request to coffee.csv file. \n
+       In open method, we use true for async parameter which means Asynchronous data transfer will be activated.
+  <li> The send method will send the request. </li>
+  <li> The server processes the request. </li>
+  <li> When server sends a response back to the web page, onreadystatechange = function()executes and updates the page content.</li>
+</ol>
+ 
+<p id="demo">Update content using ajax.</p>
+ 
+<button type="button" onclick="loadDocument()">Update Content</button>
+ 
+<script>
+function loadDocument() {
+  var xhttp = new XMLHttpRequest();
+  xhttp.onreadystatechange = function() {
+    if (this.readyState == 4 && this.status == 200) {
+      document.getElementById("demo").innerHTML = this.responseText;
+    }
+  };
+  xhttp.open("GET", "http://opentechschool.github.io/python-data-intro/files/coffee.csv", true);
+  xhttp.send();
+}
+</script>
+ 
+
+</body>
+</html>

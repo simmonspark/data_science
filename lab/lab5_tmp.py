@@ -12,132 +12,136 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 
-# predefined PARAM
-model_num = 4
+data = pd.read_csv("https://raw.githubusercontent.com/datasciencedojo/datasets/master/titanic.csv")
+data['Age'].fillna(data['Age'].mean(),inplace=True)
+data['Cabin'].fillna('N',inplace=True)
+data['Embarked'].fillna('N',inplace=True)
 
-model1 = LogisticRegression()
-model2 = SVC()
-model3 = RandomForestClassifier()
-model4 = GradientBoostingClassifier()
-search_space1 = {}  # tmp
-search_space2 = {}  # tmp
-search_space3 = {}  # tmp
-search_space4 = {}  # tmp
+data.loc[data["Sex"] == "male", "Sex_encode"] = 0
+data.loc[data["Sex"] == "female", "Sex_encode"] = 1
 
-models = [model1, model2, model3, model4]
+from sklearn.preprocessing import LabelEncoder
 
-model_param = dict(min_samples_rate=0.9, n_extimators=10, max_depth=6)
+# Null 처리 함수
+def fillna(df):
+    df['Age'].fillna(df['Age'].mean(), inplace=True)
+    df['Cabin'].fillna('N', inplace=True)
+    df['Embarked'].fillna('N', inplace=True)
+    df['Fare'].fillna(0, inplace=True)
+    return df
 
-data = pd.read_csv('./train.csv')
-dum = np.random.rand(len(data), 5)
-train_df, test_df, _, __ = train_test_split(data, dum)
-object_columns = data.select_dtypes(include=['object']).columns
+# 머신러닝 알고리즘에 불필요한 피처 제거
+def drop_features(df):
+    df.drop(['PassengerId', 'Name', 'Ticket'], axis=1, inplace=True)
+    return df
 
+# 레이블 인코딩 수행.
+def format_features(df):
+    df['Cabin'] = df['Cabin'].str[:1]
+    features = ['Cabin', 'Sex', 'Embarked']
+    for feature in features:
+        le = LabelEncoder()
+        le = le.fit(df[feature])
+        df[feature] = le.transform(df[feature])
+    return df
 
-def NullDropHandler(train, test):
-    tmp_stack = []
-
-    # 1. train과 test 데이터프레임의 공통 열만 처리
-    common_columns = train.columns.intersection(test.columns)
-
-    # 2. 결측값이 200개 이상인 열은 삭제
-    for column in common_columns:
-        if train[column].isnull().sum() > 500:
-            train = train.drop([column], axis=1)
-            test = test.drop([column], axis=1)
-            tmp_stack.append(column)  # 제거한 열을 스택에 저장
-
-    # 공통 열 리스트를 업데이트하여 삭제된 열을 제외
-    common_columns = train.columns.intersection(test.columns)
-
-    # 3. 결측값이 있는 열을 처리
-    for column in common_columns:
-        # train 데이터프레임에서 결측값이 있는 경우
-        if train[column].isnull().sum() > 0:
-            if train[column].dtype != 'object':  # 숫자형 데이터 확인
-                value_train = train[column].mean()
-                train[column] = train[column].fillna(value_train)
-            else:
-                train[column] = train[column].fillna(str('none'))
-
-                # test 데이터프레임에서 결측값이 있는 경우
-        if test[column].isnull().sum() > 0:
-            if test[column].dtype != 'object':  # 숫자형 데이터 확인
-                value_test = test[column].mean()
-                test[column] = test[column].fillna(value_test)
-            else:
-                test[column] = test[column].fillna(str('none'))
-
-    return train, test, tmp_stack  # 제거된 열 목록도 반환
+# 앞에서 설정한 데이터 전처리 함수 호출
+def transform_features(df):
+    df = fillna(df)
+    df = drop_features(df)
+    df = format_features(df)
+    return df
 
 
-def NaNHandler(train, test):
-    tmp_stack = []
-    common_columns = train.columns.intersection(test.columns)
-    # 1. NaN 값이 200개 이상인 열은 삭제
-    for column in common_columns:
-        if train[column].isna().sum() > 200:
-            train = train.drop([column], axis=1)
-            test = test.drop([column], axis=1)
-            tmp_stack.append(column)
-    common_columns = train.columns.intersection(test.columns)
-    # 2. NaN 값이 있는 열을 처리
-    for column in common_columns:
-        # train 데이터프레임에서 결측값이 있는 경우
-        if train[column].isna().sum() > 0:
-            if train[column].dtype != 'object':  # 숫자형 데이터 확인
-                value_train = train[column].mean()
-                train[column] = train[column].fillna(value_train)  # 평균값으로 NaN 채움
-            else:
-                train[column] = train[column].fillna(str('none'))
+Y = data['Survived']
+X = data.drop('Survived', axis=1)
+X = transform_features(X)
+X['Fare'] = np.log(X['Fare'] + 1)
+X['Age'] = np.log(X['Age'] + 1)
+from sklearn.model_selection import train_test_split
+X_train, X_test, y_train, y_test=train_test_split(X, Y, \
+                                                  test_size=0.2, random_state=11)
 
-                # test 데이터프레임에서 결측값이 있는 경우
-        if test[column].isna().sum() > 0:
-            if test[column].dtype != 'object':  # 숫자형 데이터 확인
-                value_test = test[column].mean()
-                test[column] = test[column].fillna(value_test)  # 평균값으로 NaN 채움
-            else:
-                test[column] = test[column].fillna(str('none'))
+from skopt import BayesSearchCV
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+from sklearn.model_selection import cross_val_score
+import warnings
 
-    return train, test, tmp_stack
+warnings.filterwarnings("ignore")  # 경고 제거
 
+# 각 모델과 검색 공간 정의
+param_spaces = {
+    'LogisticRegression': {
+        'C': (1e-6, 1e+6, 'log-uniform'),  # 정규화 강도
+        'penalty': ['l2'],  # L2 규제
+        'solver': ['lbfgs'],  # solver 선택
+    },
+    'SVC': {
+        'C': (1e-3, 1e+3, 'log-uniform'),  # 정규화 강도
+        'kernel': ['linear', 'rbf'],  # 커널 선택
+        'gamma': (1e-4, 1e+1, 'log-uniform'),  # 감마 파라미터
+    },
+    'RandomForestClassifier': {
+        'n_estimators': (10, 500),  # 트리 개수
+        'max_depth': (3, 20),  # 최대 깊이
+        'min_samples_split': (2, 10),  # 최소 샘플 분리
+    },
+    'GradientBoostingClassifier': {
+        'learning_rate': (0.01, 1.0, 'log-uniform'),  # 학습률
+        'n_estimators': (10, 500),  # 트리 개수
+        'max_depth': (3, 20),  # 최대 깊이
+    }
+}
 
-train_df, test_df, removed_columns = NaNHandler(train_df, test_df)
+models = {
+    'LogisticRegression': LogisticRegression(),
+    'SVC': SVC(probability=True),
+    'RandomForestClassifier': RandomForestClassifier(),
+    'GradientBoostingClassifier': GradientBoostingClassifier()
+}
 
-assert train_df.isna().sum().sum() == 0
-assert test_df.isna().sum().sum()
+# 베이지안 최적화를 실행하고 결과 저장
+best_models = {}
+results = {}
 
-print('corr call')
+for model_name, model in models.items():
+    print(f"Optimizing {model_name}...")
+    search = BayesSearchCV(
+        estimator=model,
+        search_spaces=param_spaces[model_name],
+        n_iter=30,  # 탐색 반복 횟수
+        cv=3,  # 3-Fold 교차 검증
+        scoring='roc_auc',  # ROC-AUC 점수 기준
+        n_jobs=-1,  # 병렬 처리
+        random_state=42
+    )
+    search.fit(X_train, y_train)
+    best_models[model_name] = search.best_estimator_
+    results[model_name] = {
+        'Best Params': search.best_params_,
+        'Best Score': search.best_score_
+    }
+    print(f"Best Params for {model_name}: {search.best_params_}")
+    print(f"Best ROC-AUC Score for {model_name}: {search.best_score_}")
 
+# 최적화 결과 출력
+for model_name, result in results.items():
+    print(f"\nModel: {model_name}")
+    print(f"Best Params: {result['Best Params']}")
+    print(f"Best ROC-AUC: {result['Best Score']:.4f}")
 
-def remove_collinear_features(train_df: pd.DataFrame, test_df: pd.DataFrame, threshold=0.8) -> tuple:
-    corr_matrix = train_df.corr()
-    iters = range(len(corr_matrix.columns) - 1)
-    drop_cols = []
+# 최적 모델 성능 평가
+print("\nEvaluating best models on test set...\n")
+for model_name, model in best_models.items():
+    y_pred = model.predict(X_test)
+    y_pred_proba = model.predict_proba(X_test)[:, 1] if hasattr(model, "predict_proba") else None
 
-    for i in iters:
-        for j in range(i + 1):
-            item = corr_matrix.iloc[j:(j + 1), (i + 1):(i + 2)]
-            col = item.columns
-            row = item.index
-            # 절대값을 씌우는 이유는
-            # corr 절대값이 높은거를 제거하면 되기 때문에
-            val = abs(item.values)
+    acc = accuracy_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred)
+    roc_auc = roc_auc_score(y_test, y_pred_proba) if y_pred_proba is not None else "N/A"
 
-            if val >= threshold:
-                print(col.values[0], '|', row.values[0], '|', round(val[0][0], 2))
-                drop_cols.append(col.values[0])
-
-    drops = set(drop_cols)
-    drops.discard('SalePrice')
-    train_df = train_df.drop(columns=drops)
-    test_df = test_df.drop(columns=drops)
-
-    return train_df, test_df
-
-
-train_df, test_df = remove_collinear_features(train_df, test_df)
-Y_train = train_df['SalePrice']
-X_train = train_df.drop(['SalePrice'], axis=1)
-Y_test = test_df['SalePrice']
-X_test = test_df.drop(['SalePrice'], axis=1)
+    print(f"Model: {model_name}")
+    print(f"Accuracy: {acc:.4f}")
+    print(f"F1-Score: {f1:.4f}")
+    print(f"ROC-AUC: {roc_auc:.4f}" if roc_auc != "N/A" else "ROC-AUC: Not available")
+    print("-" * 40)
